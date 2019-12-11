@@ -47,7 +47,7 @@ func (f *FailingKubeClient) Create(resources kube.ResourceList) (*kube.Result, e
 	if f.CreateError != nil {
 		return nil, f.CreateError
 	}
-	return f.PrintingKubeClient.Create(resources)
+	return f.PrintingKubeClient.Create(resources, false)
 }
 
 // Wait returns the configured error if set or prints

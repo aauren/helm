@@ -28,7 +28,7 @@ import (
 // A KubernetesClient must be concurrency safe.
 type Interface interface {
 	// Create creates one or more resources.
-	Create(resources ResourceList) (*Result, error)
+	Create(resources ResourceList, force bool) (*Result, error)
 
 	Wait(resources ResourceList, timeout time.Duration) error
 
