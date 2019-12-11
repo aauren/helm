@@ -83,10 +83,17 @@ func (c *Client) IsReachable() error {
 }
 
 // Create creates Kubernetes resources specified in the resource list.
-func (c *Client) Create(resources ResourceList) (*Result, error) {
-	c.Log("creating %d resource(s)", len(resources))
-	if err := perform(resources, createResource); err != nil {
-		return nil, err
+func (c *Client) Create(resources ResourceList, force bool) (*Result, error) {
+	if force {
+		c.Log("replacing %d resource(s)", len(resources))
+		if err := perform(resources, replaceResource); err != nil {
+			return nil, err
+		}
+	} else {
+		c.Log("creating %d resource(s)", len(resources))
+		if err := perform(resources, createResource); err != nil {
+			return nil, err
+		}
 	}
 	return &Result{Created: resources}, nil
 }
@@ -310,6 +317,14 @@ func batchPerform(infos ResourceList, fn func(*resource.Info) error, errs chan<-
 
 func createResource(info *resource.Info) error {
 	obj, err := resource.NewHelper(info.Client, info.Mapping).Create(info.Namespace, true, info.Object, nil)
+	if err != nil {
+		return err
+	}
+	return info.Refresh(obj, true)
+}
+
+func replaceResource(info *resource.Info) error {
+	obj, err := resource.NewHelper(info.Client, info.Mapping).Replace(info.Namespace, info.Name, true, info.Object)
 	if err != nil {
 		return err
 	}

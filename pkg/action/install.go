@@ -86,6 +86,7 @@ type Install struct {
 	// APIVersions allows a manual set of supported API Versions to be passed
 	// (for things like templating). These are ignored if ClientOnly is false
 	APIVersions chartutil.VersionSet
+	Force     bool
 }
 
 // ChartPathOptions captures common options used for controlling chart paths
@@ -119,7 +120,7 @@ func (i *Install) installCRDs(crds []*chart.File) error {
 		}
 
 		// Send them to Kube
-		if _, err := i.cfg.KubeClient.Create(res); err != nil {
+		if _, err := i.cfg.KubeClient.Create(res, false); err != nil {
 			// If the error is CRD already exists, continue.
 			if apierrors.IsAlreadyExists(err) {
 				crdName := res[0].Name
@@ -237,7 +238,7 @@ func (i *Install) Run(chrt *chart.Chart, vals map[string]interface{}) (*release.
 	// we'll end up in a state where we will delete those resources upon
 	// deleting the release because the manifest will be pointing at that
 	// resource
-	if !i.ClientOnly {
+	if !i.ClientOnly && !i.Force {
 		if err := existingResourceConflict(resources); err != nil {
 			return nil, errors.Wrap(err, "rendered manifests contain a resource that already exists. Unable to continue with install")
 		}
@@ -275,7 +276,7 @@ func (i *Install) Run(chrt *chart.Chart, vals map[string]interface{}) (*release.
 	// At this point, we can do the install. Note that before we were detecting whether to
 	// do an update, but it's not clear whether we WANT to do an update if the re-use is set
 	// to true, since that is basically an upgrade operation.
-	if _, err := i.cfg.KubeClient.Create(resources); err != nil {
+	if _, err := i.cfg.KubeClient.Create(resources, i.Force); err != nil {
 		return i.failRelease(rel, err)
 	}
 
@@ -330,7 +331,7 @@ func (i *Install) failRelease(rel *release.Release, err error) (*release.Release
 //	- empty
 //	- too long
 //	- already in use, and not deleted
-//	- used by a deleted release, and i.Replace is false
+//	- used by a deleted release, i.Replace is false, and i.Force is false
 func (i *Install) availableName() error {
 	start := i.ReleaseName
 	if start == "" {
@@ -352,7 +353,7 @@ func (i *Install) availableName() error {
 	releaseutil.Reverse(h, releaseutil.SortByRevision)
 	rel := h[0]
 
-	if st := rel.Info.Status; i.Replace && (st == release.StatusUninstalled || st == release.StatusFailed) {
+	if st := rel.Info.Status; i.Force || (i.Replace && (st == release.StatusUninstalled || st == release.StatusFailed)) {
 		return nil
 	}
 	return errors.New("cannot re-use a name that is still in use")

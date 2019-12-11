@@ -39,7 +39,7 @@ func (p *PrintingKubeClient) IsReachable() error {
 }
 
 // Create prints the values of what would be created with a real KubeClient.
-func (p *PrintingKubeClient) Create(resources kube.ResourceList) (*kube.Result, error) {
+func (p *PrintingKubeClient) Create(resources kube.ResourceList, force bool) (*kube.Result, error) {
 	_, err := io.Copy(p.Out, bufferize(resources))
 	if err != nil {
 		return nil, err
