@@ -96,6 +96,7 @@ type Install struct {
 	// OutputDir/<ReleaseName>
 	UseReleaseName bool
 	PostRenderer   postrender.PostRenderer
+	Adopt     bool
 }
 
 // ChartPathOptions captures common options used for controlling chart paths
@@ -253,7 +254,7 @@ func (i *Install) Run(chrt *chart.Chart, vals map[string]interface{}) (*release.
 	// we'll end up in a state where we will delete those resources upon
 	// deleting the release because the manifest will be pointing at that
 	// resource
-	if !i.ClientOnly && !isUpgrade {
+	if !i.ClientOnly && !isUpgrade && !i.Adopt{
 		if err := existingResourceConflict(resources); err != nil {
 			return nil, errors.Wrap(err, "rendered manifests contain a resource that already exists. Unable to continue with install")
 		}
@@ -291,8 +292,21 @@ func (i *Install) Run(chrt *chart.Chart, vals map[string]interface{}) (*release.
 	// At this point, we can do the install. Note that before we were detecting whether to
 	// do an update, but it's not clear whether we WANT to do an update if the re-use is set
 	// to true, since that is basically an upgrade operation.
-	if _, err := i.cfg.KubeClient.Create(resources); err != nil {
-		return i.failRelease(rel, err)
+	//
+	// If Adopt is specified, then we are acknowledging that resources most likely already
+	// exist in the cluster and we need to create patches for those, for the resources that
+	// don't already exist, we'll create them
+	if i.Adopt {
+		// We specifically disable force here (2nd parameter) because otherwise the kube
+		// client will attempt to do a replace operation instead of a patch operation
+		// which will fail on things like spec.ClusterIP on services which can't be modified
+		if _, err := i.cfg.KubeClient.UpdateNoManifest(resources, false); err != nil {
+			return i.failRelease(rel, err)
+		}
+	} else {
+		if _, err := i.cfg.KubeClient.Create(resources); err != nil {
+			return i.failRelease(rel, err)
+		}
 	}
 
 	if i.Wait {
@@ -352,7 +366,7 @@ func (i *Install) failRelease(rel *release.Release, err error) (*release.Release
 //	- empty
 //	- too long
 //	- already in use, and not deleted
-//	- used by a deleted release, and i.Replace is false
+//	- used by a deleted release, i.Replace is false, and i.Adopt is false
 func (i *Install) availableName() error {
 	start := i.ReleaseName
 	if start == "" {
@@ -374,7 +388,7 @@ func (i *Install) availableName() error {
 	releaseutil.Reverse(h, releaseutil.SortByRevision)
 	rel := h[0]
 
-	if st := rel.Info.Status; i.Replace && (st == release.StatusUninstalled || st == release.StatusFailed) {
+	if st := rel.Info.Status; i.Adopt || (i.Replace && (st == release.StatusUninstalled || st == release.StatusFailed)) {
 		return nil
 	}
 	return errors.New("cannot re-use a name that is still in use")

@@ -149,6 +149,28 @@ func (c *Client) Build(reader io.Reader, validate bool) (ResourceList, error) {
 	return result, scrubValidationError(err)
 }
 
+func (c *Client) UpdateNoManifest(target ResourceList, force bool) (*Result, error) {
+	var original ResourceList
+	// Loop over the target resources, if they exist in the cluster, create a new resource.Info object and add it to the
+	// "original" resource list so that we can call the Update function proper and it can create patches based on the
+	// original objects in the k8s cluster. This is the only reliable way to update resources without a manifest
+	target.Visit(func(info *resource.Info, err error) error {
+		// We specifically specify Export to be true here (3rd parameter) because otherwise random kubectl parameters will
+		// come into the patch and confuse it with an error
+		if obj, err := resource.NewHelper(info.Client, info.Mapping).Get(info.Namespace, info.Name, true); err == nil {
+			originalInfo := resource.Info{
+				Name: info.Name,
+				Namespace: info.Namespace,
+				Mapping: info.Mapping,
+				Object: obj,
+			}
+			original.Append(&originalInfo)
+		}
+		return nil
+	})
+	return c.Update(original, target, force)
+}
+
 // Update takes the current list of objects and target list of objects and
 // creates resources that don't already exists, updates resources that have been
 // modified in the target configuration, and deletes resources from the current
