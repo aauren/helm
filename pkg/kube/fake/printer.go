@@ -81,6 +81,18 @@ func (p *PrintingKubeClient) Update(_, modified kube.ResourceList, _ bool) (*kub
 	return &kube.Result{Updated: modified}, nil
 }
 
+// UpdateNoManifest implements KubeClient UpdateNoManifest.
+func (p *PrintingKubeClient) UpdateNoManifest(modified kube.ResourceList, _ bool) (*kube.Result, error) {
+	_, err := io.Copy(p.Out, bufferize(modified))
+	if err != nil {
+		return nil, err
+	}
+	// TODO: This doesn't completely mock out have some that get created,
+	// updated, and deleted. I don't think these are used in any unit tests, but
+	// we may want to refactor a way to handle future tests
+	return &kube.Result{Updated: modified}, nil
+}
+
 // Build implements KubeClient Build.
 func (p *PrintingKubeClient) Build(_ io.Reader, _ bool) (kube.ResourceList, error) {
 	return []*resource.Info{}, nil
