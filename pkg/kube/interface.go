@@ -61,6 +61,10 @@ type Interface interface {
 
 	// isReachable checks whether the client is able to connect to the cluster
 	IsReachable() error
+
+	// UpdateNoManifest updates one or more resources or creates the
+	// resource if it doesn't exist even without an existing manifest
+	UpdateNoManifest(target ResourceList, force bool) (*Result, error)
 }
 
 var _ Interface = (*Client)(nil)
