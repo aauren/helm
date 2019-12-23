@@ -159,6 +159,9 @@ func (c *Client) Build(reader io.Reader, validate bool) (ResourceList, error) {
 	return result, scrubValidationError(err)
 }
 
+// UpdateNoManifest allows us to update resources for which a traditional original copy cannot be obtained because this was not
+// a release that was previously owned by a Helm release. Instead we intend to "adopt" this chart into Helm by finding the
+// originals and generating a patch for them from the existing objects.
 func (c *Client) UpdateNoManifest(target ResourceList, force bool) (*Result, error) {
 	var original ResourceList
 	// Loop over the target resources, if they exist in the cluster, create a new resource.Info object and add it to the
@@ -167,18 +170,53 @@ func (c *Client) UpdateNoManifest(target ResourceList, force bool) (*Result, err
 	target.Visit(func(info *resource.Info, err error) error {
 		// We specifically specify Export to be true here (3rd parameter) because otherwise random kubectl parameters will
 		// come into the patch and confuse it with an error
-		if obj, err := resource.NewHelper(info.Client, info.Mapping).Get(info.Namespace, info.Name, true); err == nil {
-			originalInfo := resource.Info{
-				Name: info.Name,
-				Namespace: info.Namespace,
-				Mapping: info.Mapping,
-				Object: obj,
+		obj, err := resource.NewHelper(info.Client, info.Mapping).Get(info.Namespace, info.Name, true)
+		if err != nil {
+			// for resources that do not support export we retry with export false. The check for error as string is not very robust but works for now
+			obj, err = c.getNonExportResourceAfterError(info, err, obj)
+			if err != nil {
+				return err
 			}
-			original.Append(&originalInfo)
 		}
+		original.Append(&resource.Info{
+			Name: info.Name,
+			Namespace: info.Namespace,
+			Mapping: info.Mapping,
+			Object: obj,
+		})
 		return nil
 	})
 	return c.Update(original, target, force)
+}
+
+// getNonExportResourceAfterError allows us to interrogate the error and if it is from an export problem, do the right thing
+// by requesting with export disabled. If it isn't an export error, pass the error back instead of potentially masking it
+// by retrying anyway.
+func (c *Client) getNonExportResourceAfterError(info *resource.Info, err error, obj runtime.Object) (runtime.Object, error) {
+	kind := info.Mapping.GroupVersionKind.Kind
+	// Resources that are not found are handled by the Update method, so we don't want to fail for that here
+	if apierrors.IsNotFound(err) {
+		return obj, nil
+	}
+	if !apierrors.IsBadRequest(err) {
+		c.Log("Trying to retrieve resource while on --adopt received an unexpected error on %s called %q in %s\n",
+			kind, info.Name, info.Namespace)
+		return nil, err
+	}
+	// Check to see if the error we encountered is because export is enabled, if it is, try again with export disabled
+	statusErr := err.(*apierrors.StatusError)
+	if strings.HasPrefix(statusErr.ErrStatus.Message, "export") && strings.HasSuffix(statusErr.ErrStatus.Message, "is not supported") {
+		obj, err = resource.NewHelper(info.Client, info.Mapping).Get(info.Namespace, info.Name, false)
+		if err != nil {
+			c.Log("Problems trying to get resource with export false on %s called %q in %s\n",
+				kind, info.Name, info.Namespace)
+			return nil, err
+		}
+	} else { // If the status wasn't because of export, pass it back up as is
+		c.Log("We received a StatusErr with a Message \"%s\" that we don't know how to handle", statusErr.ErrStatus.Message)
+		return nil, err
+	}
+	return obj, nil
 }
 
 // Update takes the current list of objects and target list of objects and
