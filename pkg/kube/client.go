@@ -198,6 +198,9 @@ func (c *Client) getNonExportResourceAfterError(info *resource.Info, err error, 
 	if strings.HasPrefix(statusErr.ErrStatus.Message, "export") && strings.HasSuffix(statusErr.ErrStatus.Message, "is not supported") {
 		obj, err = resource.NewHelper(info.Client, info.Mapping).Get(info.Namespace, info.Name, false)
 		if err != nil {
+			if apierrors.IsNotFound(err) {
+				return obj, nil
+			}
 			c.Log("Problems trying to get resource with export false on %s called %q in %s\n",
 				kind, info.Name, info.Namespace)
 			return nil, err
