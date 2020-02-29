@@ -100,7 +100,7 @@ type Install struct {
 	// OutputDir/<ReleaseName>
 	UseReleaseName bool
 	PostRenderer   postrender.PostRenderer
-	Adopt     bool
+	Adopt          bool
 }
 
 // ChartPathOptions captures common options used for controlling chart paths
@@ -215,7 +215,7 @@ func (i *Install) Run(chrt *chart.Chart, vals map[string]interface{}) (*release.
 		return nil, err
 	}
 
-	//special case for helm template --is-upgrade
+	// special case for helm template --is-upgrade
 	isUpgrade := i.IsUpgrade && i.DryRun
 	options := chartutil.ReleaseOptions{
 		Name:      i.ReleaseName,
@@ -258,7 +258,7 @@ func (i *Install) Run(chrt *chart.Chart, vals map[string]interface{}) (*release.
 	// we'll end up in a state where we will delete those resources upon
 	// deleting the release because the manifest will be pointing at that
 	// resource
-	if !i.ClientOnly && !isUpgrade && !i.Adopt{
+	if !i.ClientOnly && !isUpgrade && !i.Adopt {
 		if err := existingResourceConflict(resources); err != nil {
 			return nil, errors.Wrap(err, "rendered manifests contain a resource that already exists. Unable to continue with install")
 		}
