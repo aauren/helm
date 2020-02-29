@@ -93,6 +93,11 @@ func (p *PrintingKubeClient) UpdateNoManifest(modified kube.ResourceList, _ bool
 	return &kube.Result{Updated: modified}, nil
 }
 
+// UpdateNoManifest implements KubeClient UpdateNoManifest.
+func (p *PrintingKubeClient) GetCurrent(target kube.ResourceList) (kube.ResourceList, error) {
+	return target, nil
+}
+
 // Build implements KubeClient Build.
 func (p *PrintingKubeClient) Build(_ io.Reader, _ bool) (kube.ResourceList, error) {
 	return []*resource.Info{}, nil

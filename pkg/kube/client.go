@@ -153,11 +153,20 @@ func (c *Client) Build(reader io.Reader, validate bool) (ResourceList, error) {
 // a release that was previously owned by a Helm release. Instead we intend to "adopt" this chart into Helm by finding the
 // originals and generating a patch for them from the existing objects.
 func (c *Client) UpdateNoManifest(target ResourceList, force bool) (*Result, error) {
+	original, err := c.GetCurrent(target)
+	if err != nil {
+		return nil, err
+	}
+	return c.Update(original, target, force)
+}
+
+// GetCurrent allows us to retrieve a copy of the resources as they currently are on the cluster.
+func (c *Client) GetCurrent(target ResourceList) (ResourceList, error) {
 	var original ResourceList
 	// Loop over the target resources, if they exist in the cluster, create a new resource.Info object and add it to the
 	// "original" resource list so that we can call the Update function proper and it can create patches based on the
 	// original objects in the k8s cluster. This is the only reliable way to update resources without a manifest
-	target.Visit(func(info *resource.Info, err error) error {
+	err := target.Visit(func(info *resource.Info, err error) error {
 		// We specifically specify Export to be true here (3rd parameter) because otherwise random kubectl parameters will
 		// come into the patch and confuse it with an error
 		obj, err := resource.NewHelper(info.Client, info.Mapping).Get(info.Namespace, info.Name, true)
@@ -169,14 +178,14 @@ func (c *Client) UpdateNoManifest(target ResourceList, force bool) (*Result, err
 			}
 		}
 		original.Append(&resource.Info{
-			Name: info.Name,
+			Name:      info.Name,
 			Namespace: info.Namespace,
-			Mapping: info.Mapping,
-			Object: obj,
+			Mapping:   info.Mapping,
+			Object:    obj,
 		})
 		return nil
 	})
-	return c.Update(original, target, force)
+	return original, err
 }
 
 // getNonExportResourceAfterError allows us to interrogate the error and if it is from an export problem, do the right thing

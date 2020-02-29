@@ -65,6 +65,8 @@ type Interface interface {
 	// UpdateNoManifest updates one or more resources or creates the
 	// resource if it doesn't exist even without an existing manifest
 	UpdateNoManifest(target ResourceList, force bool) (*Result, error)
+
+	GetCurrent(target ResourceList) (ResourceList, error)
 }
 
 var _ Interface = (*Client)(nil)

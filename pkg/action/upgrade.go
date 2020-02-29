@@ -62,6 +62,7 @@ type Upgrade struct {
 	Description              string
 	PostRenderer             postrender.PostRenderer
 	DisableOpenAPIValidation bool
+	Adopt                    bool
 }
 
 // NewUpgrade creates a new Upgrade object with the given configuration.
@@ -216,8 +217,10 @@ func (u *Upgrade) performUpgrade(originalRelease, upgradedRelease *release.Relea
 		}
 	}
 
-	if err := existingResourceConflict(toBeCreated); err != nil {
-		return nil, errors.Wrap(err, "rendered manifests contain a new resource that already exists. Unable to continue with update")
+	if !u.Adopt {
+		if err := existingResourceConflict(toBeCreated); err != nil {
+			return nil, errors.Wrap(err, "rendered manifests contain a new resource that already exists. Unable to continue with update")
+		}
 	}
 
 	if u.DryRun {
@@ -242,6 +245,15 @@ func (u *Upgrade) performUpgrade(originalRelease, upgradedRelease *release.Relea
 		}
 	} else {
 		u.cfg.Log("upgrade hooks disabled for %s", upgradedRelease.Name)
+	}
+
+	if u.Adopt {
+		adopted, err := u.cfg.KubeClient.GetCurrent(target)
+		if err != nil {
+			u.cfg.recordRelease(originalRelease)
+			return u.failRelease(upgradedRelease, kube.ResourceList{}, err)
+		}
+		current = append(current, adopted...)
 	}
 
 	results, err := u.cfg.KubeClient.Update(current, target, u.Force)
